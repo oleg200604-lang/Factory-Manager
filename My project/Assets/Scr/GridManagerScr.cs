@@ -1,93 +1,90 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class GridManagerScr : MonoBehaviour
 {
-    public static GridManagerScr Instance { get; private set; }
-
-    public float cellSize = 2f;
-    public Vector3 originPosition = Vector3.zero;
-
-    private Dictionary<Vector2Int, bool> occupiedCells = new Dictionary<Vector2Int, bool>();
-
-    void Awake()
+    public Vector2Int mapSize;
+    public Build[,] builds;
+    public Build building;
+    public Camera cam;
+    public void StartBuilding(Build selectBuild)
     {
-        Instance = this;
-    }
-
-    public Vector2Int WorldToGrid(Vector3 worldPos)
-    {
-        Vector3 local = worldPos - originPosition;
-        int x = Mathf.FloorToInt(local.x / cellSize);
-        int z = Mathf.FloorToInt(local.z / cellSize);
-        return new Vector2Int(x, z);
-    }
-
-    public Vector3 GridToWorld(Vector2Int gridPos)
-    {
-        return originPosition + new Vector3(
-            gridPos.x * cellSize + cellSize / 2f,
-            0f,
-            gridPos.y * cellSize + cellSize / 2f
-        );
-    }
-    // GridManager.cs — додаємо поле і методи
-
-    private HashSet<Vector2Int> platformCells = new HashSet<Vector2Int>();
-
-    // Викликати коли платформа з'являється в сцені (або з Awake, якщо статична)
-    public void RegisterPlatformCells(Vector2Int origin, Vector2Int size)
-    {
-        for (int x = 0; x < size.x; x++)
-            for (int z = 0; z < size.y; z++)
-                platformCells.Add(origin + new Vector2Int(x, z));
-    }
-
-    // Якщо платформа може зникати — зняти реєстрацію
-    public void UnregisterPlatformCells(Vector2Int origin, Vector2Int size)
-    {
-        for (int x = 0; x < size.x; x++)
-            for (int z = 0; z < size.y; z++)
-                platformCells.Remove(origin + new Vector2Int(x, z));
-    }
-
-    public bool AreCellsOnPlatform(Vector2Int origin, Vector2Int size)
-    {
-        for (int x = 0; x < size.x; x++)
-            for (int z = 0; z < size.y; z++)
-                if (!platformCells.Contains(origin + new Vector2Int(x, z)))
-                    return false;
-        return true;
-    }
-    public bool IsCellFree(Vector2Int gridPos)
-    {
-        return !occupiedCells.ContainsKey(gridPos) || !occupiedCells[gridPos];
-    }
-
-    // Перевірка для будівель розміром більше 1x1
-    public bool AreCellsFree(Vector2Int origin, Vector2Int size)
-    {
-        for (int x = 0; x < size.x; x++)
+        if (building != null)
         {
-            for (int z = 0; z < size.y; z++)
+            Destroy(building.gameObject);
+        }
+
+        building = Instantiate(selectBuild);
+    }
+    private void Start()
+    {
+        builds = new Build[mapSize.x, mapSize.y];
+    }
+    private void OnDrawGizmosSelected()
+    {
+        for (int x = 0; x < mapSize.x; x++)
+        {
+            for (int y = 0; y < mapSize.y; y++)
             {
-                Vector2Int cell = origin + new Vector2Int(x, z);
-                if (!IsCellFree(cell)) return false;
+                Gizmos.color = Color.yellow;
+
+                Gizmos.DrawCube(transform.position + new Vector3(x, 0.05f, y), new Vector3(1, 0.1f, 1));
             }
         }
-        return true;
     }
 
-    public void OccupyCells(Vector2Int origin, Vector2Int size, bool occupied)
+    private void Update()
     {
-        for (int x = 0; x < size.x; x++)
+        if (building != null)
         {
-            for (int z = 0; z < size.y; z++)
+            var groundPanel = new Plane(Vector3.up, Vector3.zero);
+            Ray rey = cam.ScreenPointToRay(Input.mousePosition);
+
+            if (groundPanel.Raycast(rey, out float pos))
             {
-                Vector2Int cell = origin + new Vector2Int(x, z);
-                occupiedCells[cell] = occupied;
+                Vector3 worldPos = rey.GetPoint(pos);
+
+                int x = Mathf.RoundToInt(worldPos.x);
+                int y = Mathf.RoundToInt(worldPos.z);
+
+                building.transform.position = new Vector3(x, 0, y);
+                if (y < 0 || y > mapSize.y - building.size.y || x < 0 || x > mapSize.x - building.size.x || isMapFree(x,y))
+                {
+                    building.SetTransform(false);
+                }
+                else
+                {
+                    building.SetTransform(true);
+                    if (Input.GetMouseButtonDown(0))
+                    {
+                        for (int X = 0; X< building.size.x; X++)
+                        {
+                            for (int Y = 0; Y < building.size.x; Y++)
+                            {
+                                builds[x + X, y + Y] = building;
+                            }
+
+                        }
+
+                        building.SetBuild();
+                        building = null;
+                    }
+                }
             }
         }
+    }
+    private bool isMapFree(int x, int y)
+    {
+        for (int X = 0; X < building.size.x; X++)
+        {
+            for (int Y = 0; Y < building.size.y; Y++)
+            {
+                if (builds[x + X, y + Y] != null)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
